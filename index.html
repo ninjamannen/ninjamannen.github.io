@@ -5,12 +5,32 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Temperature Monitor</title>
 
-  <!-- Chart.js for the graphs -->
+  <!-- ── PWA / Home Screen app settings ── -->
+  <!-- Tells iOS this can be used as a standalone app -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <!-- Sets the status bar style (black looks best on dark dashboards) -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <!-- The name shown under the icon on the home screen -->
+  <meta name="apple-mobile-web-app-title" content="Temp Monitor">
+  <!-- Theme colour for the browser chrome on Android too -->
+  <meta name="theme-color" content="#0d1117">
+
+  <!-- ── Home screen icons for iPhone ──
+       Create a 180x180 pixel PNG of your icon and upload it
+       to your GitHub repo as apple-touch-icon.png
+       A simple thermometer emoji on a dark background works well.
+       If you skip this, iOS will use a screenshot of the page instead. -->
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+  <!-- Web App Manifest (also helps on Android) -->
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Chart.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-  <!-- Chart.js date adapter -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-adapter-date-fns/3.0.0/chartjs-adapter-date-fns.bundle.min.js"></script>
 
   <style>
+    /* ── All your existing CSS stays exactly as it was ── */
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
@@ -18,6 +38,9 @@
       background: #0d1117;
       color: #e6edf3;
       min-height: 100vh;
+      /* Safe area insets for iPhone notch and home bar */
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
     }
 
     header {
@@ -27,6 +50,10 @@
       display: flex;
       align-items: center;
       gap: 12px;
+      /* Stick to top when scrolling */
+      position: sticky;
+      top: 0;
+      z-index: 100;
     }
     header h1 { font-size: 1.4rem; font-weight: 600; }
     header span { font-size: 1.6rem; }
@@ -37,90 +64,95 @@
       color: #8b949e;
     }
 
-    main { padding: 28px 32px; max-width: 1200px; margin: 0 auto; }
+    main { padding: 20px 16px; max-width: 1200px; margin: 0 auto; }
 
-    /* ── Current readings cards ── */
     .cards {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 16px;
-      margin-bottom: 36px;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
     }
 
     .card {
       background: #161b22;
       border: 1px solid #30363d;
       border-radius: 12px;
-      padding: 20px;
+      padding: 16px;
       transition: border-color 0.2s;
+      /* Tap highlight on mobile */
+      -webkit-tap-highlight-color: transparent;
     }
-    .card:hover { border-color: #58a6ff; }
+    .card:active { border-color: #58a6ff; transform: scale(0.98); }
 
     .card-label {
-      font-size: 0.75rem;
+      font-size: 0.7rem;
       text-transform: uppercase;
       letter-spacing: 0.06em;
       color: #8b949e;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
     }
 
     .card-value {
-      font-size: 2.2rem;
+      font-size: 2rem;
       font-weight: 700;
       line-height: 1;
     }
 
     .card-unit {
-      font-size: 1rem;
+      font-size: 0.9rem;
       color: #8b949e;
-      margin-left: 4px;
+      margin-left: 3px;
     }
 
     .card-dot {
-      width: 8px; height: 8px;
+      width: 7px; height: 7px;
       border-radius: 50%;
       display: inline-block;
-      margin-right: 6px;
+      margin-right: 5px;
     }
 
-    /* ── Charts ── */
     .charts {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(480px, 1fr));
-      gap: 24px;
+      grid-template-columns: 1fr;  /* Single column on mobile */
+      gap: 20px;
+    }
+
+    /* Two columns on wider screens */
+    @media (min-width: 900px) {
+      .charts { grid-template-columns: repeat(2, 1fr); }
     }
 
     .chart-box {
       background: #161b22;
       border: 1px solid #30363d;
       border-radius: 12px;
-      padding: 20px 24px;
+      padding: 16px 18px;
     }
 
     .chart-box h2 {
-      font-size: 0.95rem;
+      font-size: 0.9rem;
       font-weight: 600;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
       color: #e6edf3;
     }
 
-    .chart-box canvas { width: 100% !important; }
-
-    /* ── Loading / error ── */
     #error-banner {
       display: none;
       background: #3d1f1f;
       border: 1px solid #f85149;
       border-radius: 8px;
-      padding: 12px 18px;
-      margin-bottom: 24px;
+      padding: 12px 16px;
+      margin-bottom: 20px;
       color: #f85149;
-      font-size: 0.9rem;
+      font-size: 0.85rem;
     }
 
-    @media (max-width: 600px) {
-      main { padding: 16px; }
-      .charts { grid-template-columns: 1fr; }
+    /* Pull-to-refresh indicator */
+    #refresh-hint {
+      text-align: center;
+      color: #8b949e;
+      font-size: 0.75rem;
+      padding: 8px 0 4px;
     }
   </style>
 </head>
@@ -135,11 +167,10 @@
 <main>
   <div id="error-banner"></div>
 
-  <!-- Current value cards -->
   <div class="cards">
     <div class="card">
       <div class="card-label">
-        <span class="card-dot" style="background:#38bdf8"></span>Water Temperature
+        <span class="card-dot" style="background:#38bdf8"></span>Water Temp
       </div>
       <div class="card-value" id="val-water">
         --<span class="card-unit">°C</span>
@@ -147,7 +178,7 @@
     </div>
     <div class="card">
       <div class="card-label">
-        <span class="card-dot" style="background:#fb923c"></span>Indoor Temperature
+        <span class="card-dot" style="background:#fb923c"></span>Indoor Temp
       </div>
       <div class="card-value" id="val-indoor">
         --<span class="card-unit">°C</span>
@@ -155,7 +186,7 @@
     </div>
     <div class="card">
       <div class="card-label">
-        <span class="card-dot" style="background:#4ade80"></span>Outdoor Temperature
+        <span class="card-dot" style="background:#4ade80"></span>Outdoor Temp
       </div>
       <div class="card-value" id="val-outdoor">
         --<span class="card-unit">°C</span>
@@ -179,14 +210,15 @@
     </div>
   </div>
 
-  <!-- Charts -->
+  <p id="refresh-hint">Pull down to refresh</p>
+
   <div class="charts">
     <div class="chart-box">
-      <h2>🌡 Temperature History — 24 hours</h2>
+      <h2>🌡 Temperature — 24h</h2>
       <canvas id="chart-temp"></canvas>
     </div>
     <div class="chart-box">
-      <h2>💧 Humidity &amp; Pressure History — 24 hours</h2>
+      <h2>💧 Humidity &amp; Pressure — 24h</h2>
       <canvas id="chart-hum-pres"></canvas>
     </div>
   </div>
@@ -194,13 +226,11 @@
 
 <script>
 // ═══════════════════════════════════════════════════
-//  CONFIG  — fill in your Adafruit IO details here
+//  CONFIG
 // ═══════════════════════════════════════════════════
-const AIO_USERNAME = "Jollo77";
-const AIO_KEY      = "Jollo77**";
-const HOURS        = 168;   // how many hours of history to show
-
-// ═══════════════════════════════════════════════════
+const AIO_USERNAME = Jollo77;
+const AIO_KEY      = Jollo77**;
+const HOURS        = 24;
 
 const FEEDS = {
   water:   "water-temperature",
@@ -210,7 +240,6 @@ const FEEDS = {
   pres:    "pressure"
 };
 
-// Build Adafruit IO URL for last N hours of data
 function aioUrl(feed) {
   const end   = new Date();
   const start = new Date(end - HOURS * 3600 * 1000);
@@ -219,123 +248,103 @@ function aioUrl(feed) {
          `&X-AIO-Key=${AIO_KEY}`;
 }
 
-// Fetch one feed → returns [{x: Date, y: float}, ...]
 async function fetchFeed(feedKey) {
   const r = await fetch(aioUrl(FEEDS[feedKey]));
-  if (!r.ok) throw new Error(`Feed ${feedKey}: HTTP ${r.status}`);
+  if (!r.ok) throw new Error(`Feed "${feedKey}": HTTP ${r.status}`);
   const data = await r.json();
-  // Adafruit returns newest first — reverse for chronological order
-  return data
-    .reverse()
-    .map(d => ({ x: new Date(d.created_at), y: parseFloat(d.value) }));
+  return data.reverse().map(d => ({
+    x: new Date(d.created_at),
+    y: parseFloat(d.value)
+  }));
 }
 
-// ── Chart.js shared options ────────────────────────
-const gridColor  = "rgba(255,255,255,0.06)";
-const tickColor  = "#8b949e";
+// ── Charts ────────────────────────────────────────
+const gridColor = "rgba(255,255,255,0.06)";
+const tickColor = "#8b949e";
 
 function timeAxis() {
   return {
     type: "time",
     time: { unit: "hour", displayFormats: { hour: "HH:mm" } },
-    ticks: { color: tickColor, maxTicksLimit: 8 },
+    ticks: { color: tickColor, maxTicksLimit: 6 },
     grid: { color: gridColor }
   };
 }
-
 function valueAxis(label) {
   return {
     ticks: { color: tickColor },
     grid:  { color: gridColor },
-    title: { display: true, text: label, color: tickColor, font: { size: 11 } }
+    title: { display: true, text: label, color: tickColor, font: { size: 10 } }
   };
 }
 
-// ── Temperature chart ──────────────────────────────
 let chartTemp = new Chart(
   document.getElementById("chart-temp").getContext("2d"), {
   type: "line",
   data: {
     datasets: [
-      {
-        label: "Water",
-        data: [], borderColor: "#38bdf8", backgroundColor: "rgba(56,189,248,0.08)",
-        tension: 0.3, pointRadius: 0, borderWidth: 2, fill: true
-      },
-      {
-        label: "Indoor",
-        data: [], borderColor: "#fb923c", backgroundColor: "rgba(251,146,60,0.08)",
-        tension: 0.3, pointRadius: 0, borderWidth: 2, fill: true
-      },
-      {
-        label: "Outdoor",
-        data: [], borderColor: "#4ade80", backgroundColor: "rgba(74,222,128,0.08)",
-        tension: 0.3, pointRadius: 0, borderWidth: 2, fill: true
-      }
+      { label: "Water",   data: [], borderColor: "#38bdf8",
+        backgroundColor: "rgba(56,189,248,0.08)",
+        tension: 0.3, pointRadius: 0, borderWidth: 2, fill: true },
+      { label: "Indoor",  data: [], borderColor: "#fb923c",
+        backgroundColor: "rgba(251,146,60,0.08)",
+        tension: 0.3, pointRadius: 0, borderWidth: 2, fill: true },
+      { label: "Outdoor", data: [], borderColor: "#4ade80",
+        backgroundColor: "rgba(74,222,128,0.08)",
+        tension: 0.3, pointRadius: 0, borderWidth: 2, fill: true }
     ]
   },
   options: {
     responsive: true,
     interaction: { mode: "index", intersect: false },
     plugins: {
-      legend: { labels: { color: "#e6edf3", boxWidth: 12 } },
+      legend: { labels: { color: "#e6edf3", boxWidth: 10, font: { size: 11 } } },
       tooltip: {
         callbacks: {
           label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} °C`
         }
       }
     },
-    scales: {
-      x: timeAxis(),
-      y: valueAxis("Temperature (°C)")
-    }
+    scales: { x: timeAxis(), y: valueAxis("°C") }
   }
 });
 
-// ── Humidity + Pressure chart (dual Y-axis) ────────
 let chartHumPres = new Chart(
   document.getElementById("chart-hum-pres").getContext("2d"), {
   type: "line",
   data: {
     datasets: [
-      {
-        label: "Humidity (%)",
-        data: [], borderColor: "#c084fc", backgroundColor: "rgba(192,132,252,0.08)",
-        tension: 0.3, pointRadius: 0, borderWidth: 2, fill: true,
-        yAxisID: "yHum"
-      },
-      {
-        label: "Pressure (hPa)",
-        data: [], borderColor: "#f472b6", backgroundColor: "rgba(244,114,182,0.08)",
-        tension: 0.3, pointRadius: 0, borderWidth: 2, fill: true,
-        yAxisID: "yPres"
-      }
+      { label: "Humidity (%)",    data: [], borderColor: "#c084fc",
+        backgroundColor: "rgba(192,132,252,0.08)",
+        tension: 0.3, pointRadius: 0, borderWidth: 2, fill: true, yAxisID: "yHum" },
+      { label: "Pressure (hPa)", data: [], borderColor: "#f472b6",
+        backgroundColor: "rgba(244,114,182,0.08)",
+        tension: 0.3, pointRadius: 0, borderWidth: 2, fill: true, yAxisID: "yPres" }
     ]
   },
   options: {
     responsive: true,
     interaction: { mode: "index", intersect: false },
     plugins: {
-      legend: { labels: { color: "#e6edf3", boxWidth: 12 } }
+      legend: { labels: { color: "#e6edf3", boxWidth: 10, font: { size: 11 } } }
     },
     scales: {
-      x: timeAxis(),
-      yHum:  { ...valueAxis("Humidity (%)"),    position: "left",  grid: { color: gridColor } },
-      yPres: { ...valueAxis("Pressure (hPa)"),  position: "right", grid: { display: false } }
+      x:     timeAxis(),
+      yHum:  { ...valueAxis("Humidity (%)"),   position: "left",  grid: { color: gridColor } },
+      yPres: { ...valueAxis("Pressure (hPa)"), position: "right", grid: { display: false } }
     }
   }
 });
 
-// ── Update current-value cards ─────────────────────
+// ── Card updater ──────────────────────────────────
 function updateCard(id, points) {
   if (!points.length) return;
   const latest = points[points.length - 1].y;
-  const el = document.getElementById(id);
+  const el   = document.getElementById(id);
   const unit = el.querySelector(".card-unit").outerHTML;
   el.innerHTML = latest.toFixed(1) + unit;
 }
 
-// ── Show / hide error banner ───────────────────────
 function showError(msg) {
   const b = document.getElementById("error-banner");
   b.textContent = "⚠ " + msg;
@@ -345,19 +354,15 @@ function clearError() {
   document.getElementById("error-banner").style.display = "none";
 }
 
-// ── Main data load ─────────────────────────────────
+// ── Load all data ─────────────────────────────────
 async function loadData() {
   try {
     clearError();
     const [water, indoor, outdoor, hum, pres] = await Promise.all([
-      fetchFeed("water"),
-      fetchFeed("indoor"),
-      fetchFeed("outdoor"),
-      fetchFeed("hum"),
-      fetchFeed("pres")
+      fetchFeed("water"), fetchFeed("indoor"), fetchFeed("outdoor"),
+      fetchFeed("hum"),   fetchFeed("pres")
     ]);
 
-    // Update charts
     chartTemp.data.datasets[0].data = water;
     chartTemp.data.datasets[1].data = indoor;
     chartTemp.data.datasets[2].data = outdoor;
@@ -367,7 +372,6 @@ async function loadData() {
     chartHumPres.data.datasets[1].data = pres;
     chartHumPres.update("none");
 
-    // Update cards
     updateCard("val-water",    water);
     updateCard("val-indoor",   indoor);
     updateCard("val-outdoor",  outdoor);
@@ -375,43 +379,35 @@ async function loadData() {
     updateCard("val-pressure", pres);
 
     document.getElementById("last-updated").textContent =
-      "Last updated: " + new Date().toLocaleTimeString();
+      new Date().toLocaleTimeString();
 
-  } catch (e) {
-    showError(e.message + " — check your AIO_USERNAME and AIO_KEY");
+  } catch(e) {
+    showError(e.message);
     console.error(e);
   }
 }
 
-// Load immediately, then refresh every 60 seconds
+// Auto-refresh every 60 seconds
 loadData();
 setInterval(loadData, 60000);
+
+// ── Pull-to-refresh ───────────────────────────────
+// On mobile, pulling down triggers a reload
+let touchStartY = 0;
+document.addEventListener("touchstart", e => {
+  touchStartY = e.touches[0].clientY;
+}, { passive: true });
+
+document.addEventListener("touchend", e => {
+  const diff = e.changedTouches[0].clientY - touchStartY;
+  // If pulled down more than 80px while already at top of page
+  if (diff > 80 && window.scrollY === 0) {
+    document.getElementById("refresh-hint").textContent = "Refreshing...";
+    loadData().then(() => {
+      document.getElementById("refresh-hint").textContent = "Pull down to refresh";
+    });
+  }
+}, { passive: true });
 </script>
 </body>
 </html>
-```
-
----
-
-## Step 6 — Upload the Page to GitHub
-
-1. In your GitHub repository, click **Add file** → **Create new file**
-2. Name it `index.html`
-3. Paste the entire HTML above
-4. Fill in `YOUR_ADAFRUIT_IO_USERNAME` and `YOUR_ADAFRUIT_IO_KEY` in the two places marked
-5. Click **Commit changes**
-
-Your site will be live at `https://yourdomain.com` within a few minutes.
-
----
-
-## Complete Data Flow Summary
-```
-Every 30s:
-  Heltec  ──HTTPS POST──►  io.adafruit.com
-                              stores up to 30 days history (free)
-
-Every 60s:
-  Browser  ──HTTPS GET──►  io.adafruit.com/api/v2/...
-              ◄── JSON ────  last 24h of readings
-  Charts and cards update automatically
