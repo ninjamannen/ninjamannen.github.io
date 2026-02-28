@@ -2,7 +2,7 @@
 <html lang="sv">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Långviken</title>
 
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -19,85 +19,242 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
+    html, body {
+      height: 100%;
+      width: 100%;
+    }
+
     body {
-      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
       background: #0d1117;
       color: #e6edf3;
       min-height: 100vh;
-      padding-top: env(safe-area-inset-top);
-      padding-bottom: env(safe-area-inset-bottom);
+      overflow-x: hidden;
     }
 
-    header {
-      background: #161b22;
-      border-bottom: 1px solid #30363d;
-      padding: 20px 32px;
+    /* ── Full-screen fixed background image ── */
+    #bg {
+      position: fixed;
+      inset: 0;
+      background-color: #0d1117;
+      background-size: cover;
+      background-position: center center;
+      background-repeat: no-repeat;
+      /* On iPhone, cover the notch area too */
+      background-attachment: scroll;
+      transition: background-image 1.5s ease-in-out;
+      z-index: 0;
+    }
+
+    /* Gradient overlay — dark at top and bottom, clear in middle
+       so the photo is visible but text is always readable */
+    #bg::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(
+        to bottom,
+        rgba(0,0,0,0.60) 0%,
+        rgba(0,0,0,0.20) 30%,
+        rgba(0,0,0,0.20) 60%,
+        rgba(0,0,0,0.75) 100%
+      );
+      z-index: 1;
+    }
+
+    /* Pulsing dark background shown while image loads */
+    #bg.loading {
+      animation: bgPulse 2s infinite;
+    }
+    @keyframes bgPulse {
+      0%, 100% { background-color: #0d1117; }
+      50%       { background-color: #161b22; }
+    }
+
+    /* ── Everything above the background ── */
+    #page {
+      position: relative;
+      z-index: 2;
+      min-height: 100dvh;
       display: flex;
-      align-items: center;
-      gap: 12px;
+      flex-direction: column;
+    }
+
+    /* ── Sticky header ── */
+    header {
       position: sticky;
       top: 0;
-      z-index: 100;
+      z-index: 10;
+      background: rgba(13,17,23,0.55);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid rgba(255,255,255,0.10);
+      padding: 16px 20px 14px;
+      padding-top: max(env(safe-area-inset-top), 16px);
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
-    header h1 { font-size: 1.4rem; font-weight: 600; }
-    header span { font-size: 1.6rem; }
+
+    header span { font-size: 1.5rem; }
+
+    header h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      color: #fff;
+      text-shadow: 0 1px 8px rgba(0,0,0,0.5);
+    }
 
     #last-updated {
       margin-left: auto;
-      font-size: 0.8rem;
-      color: #8b949e;
+      font-size: 0.75rem;
+      color: rgba(255,255,255,0.55);
     }
 
-    main { padding: 20px 16px; max-width: 1200px; margin: 0 auto; }
+    /* ── Status pill ── */
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(0,0,0,0.30);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 20px;
+      padding: 4px 10px;
+      font-size: 0.72rem;
+      color: rgba(255,255,255,0.75);
+    }
 
+    .status-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #22c55e;
+      animation: pulse 2s infinite;
+    }
+    .status-dot.offline { background: #ef4444; animation: none; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.3; }
+    }
+
+    /* ── Main content ── */
+    main {
+      flex: 1;
+      padding: 16px;
+      padding-bottom: max(env(safe-area-inset-bottom), 16px);
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    /* ── Error banner ── */
+    #error-banner {
+      display: none;
+      background: rgba(61,31,31,0.85);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid #f85149;
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      color: #f85149;
+      font-size: 0.85rem;
+    }
+
+    /* ── Sensor cards ── */
     .cards {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 12px;
-      margin-bottom: 24px;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
     }
 
     .card {
-      background: #161b22;
-      border: 1px solid #30363d;
-      border-radius: 12px;
-      padding: 16px;
-      transition: border-color 0.2s;
+      background: rgba(22,27,34,0.55);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 14px;
+      padding: 14px 12px 12px;
       -webkit-tap-highlight-color: transparent;
+      transition: transform 0.15s, border-color 0.15s;
     }
-    .card:active { border-color: #58a6ff; transform: scale(0.98); }
+    .card:active {
+      border-color: rgba(255,255,255,0.35);
+      transform: scale(0.97);
+    }
 
     .card-label {
-      font-size: 0.7rem;
+      font-size: 0.66rem;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: #8b949e;
-      margin-bottom: 8px;
-    }
-
-    .card-value {
-      font-size: 2rem;
-      font-weight: 700;
-      line-height: 1;
-    }
-
-    .card-unit {
-      font-size: 0.9rem;
-      color: #8b949e;
-      margin-left: 3px;
+      letter-spacing: 0.07em;
+      color: rgba(255,255,255,0.55);
+      margin-bottom: 7px;
     }
 
     .card-dot {
-      width: 7px; height: 7px;
+      width: 6px; height: 6px;
       border-radius: 50%;
       display: inline-block;
       margin-right: 5px;
     }
 
+    .card-value {
+      font-size: 1.9rem;
+      font-weight: 700;
+      line-height: 1;
+      color: #fff;
+      text-shadow: 0 1px 6px rgba(0,0,0,0.4);
+    }
+
+    .card-unit {
+      font-size: 0.85rem;
+      font-weight: 400;
+      color: rgba(255,255,255,0.55);
+      margin-left: 2px;
+    }
+
+    /* ── Camera bar ── */
+    .cam-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+
+    .cam-info {
+      font-size: 0.72rem;
+      color: rgba(255,255,255,0.45);
+    }
+
+    .cam-btn {
+      background: rgba(0,0,0,0.35);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 14px;
+      color: rgba(255,255,255,0.75);
+      font-size: 0.75rem;
+      padding: 5px 14px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .cam-btn:active { background: rgba(255,255,255,0.15); }
+
+    /* ── Pull-to-refresh hint ── */
+    #refresh-hint {
+      text-align: center;
+      color: rgba(255,255,255,0.35);
+      font-size: 0.72rem;
+      padding: 6px 0 14px;
+    }
+
+    /* ── Charts ── */
     .charts {
       display: grid;
       grid-template-columns: 1fr;
-      gap: 20px;
+      gap: 16px;
     }
 
     @media (min-width: 900px) {
@@ -105,105 +262,120 @@
     }
 
     .chart-box {
-      background: #161b22;
-      border: 1px solid #30363d;
-      border-radius: 12px;
-      padding: 16px 18px;
+      background: rgba(22,27,34,0.60);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 14px;
+      padding: 16px 14px;
     }
 
     .chart-box h2 {
-      font-size: 0.9rem;
-      font-weight: 600;
-      margin-bottom: 14px;
-      color: #e6edf3;
-    }
-
-    #error-banner {
-      display: none;
-      background: #3d1f1f;
-      border: 1px solid #f85149;
-      border-radius: 8px;
-      padding: 12px 16px;
-      margin-bottom: 20px;
-      color: #f85149;
       font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: rgba(255,255,255,0.85);
     }
 
-    #refresh-hint {
+    /* ── Countdown ── */
+    #countdown {
       text-align: center;
-      color: #8b949e;
-      font-size: 0.75rem;
-      padding: 8px 0 4px;
+      font-size: 0.70rem;
+      color: rgba(255,255,255,0.30);
+      padding: 6px 0 12px;
     }
   </style>
 </head>
 <body>
 
-<header>
-  <span>🌊</span>
-  <h1>Långviken</h1>
-  <div id="last-updated">Laddar...</div>
-</header>
+<!-- Full-screen background image -->
+<div id="bg" class="loading"></div>
 
-<main>
-  <div id="error-banner"></div>
+<!-- All content above the background -->
+<div id="page">
 
-  <div class="cards">
-    <div class="card">
-      <div class="card-label">
-        <span class="card-dot" style="background:#38bdf8"></span>Vattentemperatur
-      </div>
-      <div class="card-value" id="val-water">
-        --<span class="card-unit">°C</span>
-      </div>
+  <header>
+    <span>🌊</span>
+    <h1>Långviken</h1>
+    <div class="status-pill">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">–</span>
     </div>
-    <div class="card">
-      <div class="card-label">
-        <span class="card-dot" style="background:#fb923c"></span>Inomhustemperatur
-      </div>
-      <div class="card-value" id="val-indoor">
-        --<span class="card-unit">°C</span>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-label">
-        <span class="card-dot" style="background:#4ade80"></span>Utomhustemperatur
-      </div>
-      <div class="card-value" id="val-outdoor">
-        --<span class="card-unit">°C</span>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-label">
-        <span class="card-dot" style="background:#c084fc"></span>Luftfuktighet
-      </div>
-      <div class="card-value" id="val-humidity">
-        --<span class="card-unit">%</span>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-label">
-        <span class="card-dot" style="background:#f472b6"></span>Lufttryck
-      </div>
-      <div class="card-value" id="val-pressure">
-        --<span class="card-unit">mbar</span>
-      </div>
-    </div>
-  </div>
+    <div id="last-updated">Laddar...</div>
+  </header>
 
-  <p id="refresh-hint">Dra nedåt för att uppdatera</p>
+  <main>
+    <div id="error-banner"></div>
 
-  <div class="charts">
-    <div class="chart-box">
-      <h2>🌡 Temperatur — 168h</h2>
-      <canvas id="chart-temp"></canvas>
+    <!-- Camera timestamp + refresh button -->
+    <div class="cam-bar">
+      <div class="cam-info" id="camTime">Hämtar bild...</div>
+      <button class="cam-btn" onclick="fetchCamera()">↻ Ny bild</button>
     </div>
-    <div class="chart-box">
-      <h2>💧 Luftfuktighet &amp; Lufttryck — 168h</h2>
-      <canvas id="chart-hum-pres"></canvas>
+
+    <!-- Sensor cards -->
+    <div class="cards">
+      <div class="card">
+        <div class="card-label">
+          <span class="card-dot" style="background:#38bdf8"></span>Vattentemperatur
+        </div>
+        <div class="card-value" id="val-water">
+          --<span class="card-unit">°C</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-label">
+          <span class="card-dot" style="background:#fb923c"></span>Inomhustemperatur
+        </div>
+        <div class="card-value" id="val-indoor">
+          --<span class="card-unit">°C</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-label">
+          <span class="card-dot" style="background:#4ade80"></span>Utomhustemperatur
+        </div>
+        <div class="card-value" id="val-outdoor">
+          --<span class="card-unit">°C</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-label">
+          <span class="card-dot" style="background:#c084fc"></span>Luftfuktighet
+        </div>
+        <div class="card-value" id="val-humidity">
+          --<span class="card-unit">%</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-label">
+          <span class="card-dot" style="background:#f472b6"></span>Lufttryck
+        </div>
+        <div class="card-value" id="val-pressure">
+          --<span class="card-unit">mbar</span>
+        </div>
+      </div>
     </div>
-  </div>
-</main>
+
+    <!-- Countdown to next camera image -->
+    <div id="countdown"></div>
+
+    <p id="refresh-hint">Dra nedåt för att uppdatera</p>
+
+    <!-- Charts -->
+    <div class="charts">
+      <div class="chart-box">
+        <h2>🌡 Temperatur — 168h</h2>
+        <canvas id="chart-temp"></canvas>
+      </div>
+      <div class="chart-box">
+        <h2>💧 Luftfuktighet &amp; Lufttryck — 168h</h2>
+        <canvas id="chart-hum-pres"></canvas>
+      </div>
+    </div>
+
+  </main>
+</div><!-- #page -->
 
 <script>
 // ═══════════════════════════════════════════════════
@@ -212,6 +384,7 @@
 const AIO_USERNAME = "Jollo77";
 const AIO_KEY      = "Jollo77**";
 const HOURS        = 168;
+const CAMERA_REFRESH_MS = 3600000;  // 60 minutes — matches ESP-EYE upload interval
 
 const FEEDS = {
   water:   "water-temperature",
@@ -221,6 +394,7 @@ const FEEDS = {
   pres:    "pressure"
 };
 
+// ── Adafruit IO helpers ───────────────────────────
 function aioUrl(feed) {
   const end   = new Date();
   const start = new Date(end - HOURS * 3600 * 1000);
@@ -239,17 +413,97 @@ async function fetchFeed(feedKey) {
   }));
 }
 
+// Fetch most recent single value from a named feed
+async function fetchLatest(feedName) {
+  const url = `https://io.adafruit.com/api/v2/${AIO_USERNAME}/feeds/${feedName}/data/last`;
+  const r = await fetch(url, { headers: { 'X-AIO-Key': AIO_KEY } });
+  if (!r.ok) throw new Error(`Latest "${feedName}": HTTP ${r.status}`);
+  return r.json();
+}
+
+// ── Time formatters ───────────────────────────────
+function fmtTime(iso) {
+  if (!iso) return '–';
+  return new Date(iso).toLocaleTimeString('sv-SE', {
+    timeZone: 'Europe/Stockholm',
+    hour: '2-digit', minute: '2-digit', second: '2-digit'
+  });
+}
+
+function fmtDateTime(iso) {
+  if (!iso) return '–';
+  return new Date(iso).toLocaleString('sv-SE', {
+    timeZone: 'Europe/Stockholm',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit'
+  });
+}
+
+function fmtCountdown(totalSeconds) {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+// ── Camera / background ───────────────────────────
+let lastCameraFetch = 0;
+let countdownTimer  = null;
+
+async function fetchCamera() {
+  try {
+    const data = await fetchLatest('camera-url');
+    if (!data || !data.value) {
+      document.getElementById('camTime').textContent = 'Ingen bild ännu';
+      return;
+    }
+
+    const url = data.value + '?t=' + Date.now();
+    const bg  = document.getElementById('bg');
+
+    // Preload before swapping so there is no blank flash
+    const img = new Image();
+    img.onload = () => {
+      bg.classList.remove('loading');
+      bg.style.backgroundImage = `url('${url}')`;
+    };
+    img.onerror = () => {
+      document.getElementById('camTime').textContent = 'Kunde inte ladda bild';
+    };
+    img.src = url;
+
+    document.getElementById('camTime').textContent =
+      'Tagen: ' + fmtDateTime(data.created_at);
+
+    lastCameraFetch = Date.now();
+    startCountdown();
+
+  } catch (err) {
+    console.error('Kamera fel:', err);
+    document.getElementById('camTime').textContent = 'Fel vid hämtning';
+  }
+}
+
+function startCountdown() {
+  if (countdownTimer) clearInterval(countdownTimer);
+  const el = document.getElementById('countdown');
+  countdownTimer = setInterval(() => {
+    const elapsed   = Date.now() - lastCameraFetch;
+    const remaining = Math.max(0, Math.floor((CAMERA_REFRESH_MS - elapsed) / 1000));
+    el.textContent  = remaining > 0
+      ? `Nästa bild om ${fmtCountdown(remaining)}`
+      : 'Hämtar ny bild...';
+    if (remaining === 0) clearInterval(countdownTimer);
+  }, 1000);
+}
+
 // ── Charts ────────────────────────────────────────
-const gridColor = "rgba(255,255,255,0.06)";
-const tickColor = "#8b949e";
+const gridColor = "rgba(255,255,255,0.07)";
+const tickColor = "rgba(255,255,255,0.45)";
 
 function timeAxis() {
   return {
     type: "time",
-    time: {
-      unit: "day",
-      displayFormats: { day: "EEE dd/MM" }
-    },
+    time: { unit: "day", displayFormats: { day: "EEE dd/MM" } },
     ticks: { color: tickColor, maxTicksLimit: 8 },
     grid:  { color: gridColor }
   };
@@ -268,14 +522,14 @@ let chartTemp = new Chart(
   type: "line",
   data: {
     datasets: [
-      { label: "Vattentemperatur",   data: [], borderColor: "#38bdf8",
-        backgroundColor: "rgba(56,189,248,0.08)",
+      { label: "Vattentemperatur",  data: [], borderColor: "#38bdf8",
+        backgroundColor: "rgba(56,189,248,0.10)",
         tension: 0.3, pointRadius: 0, borderWidth: 2, fill: true },
-      { label: "Inomhustemperatur",  data: [], borderColor: "#fb923c",
-        backgroundColor: "rgba(251,146,60,0.08)",
+      { label: "Inomhustemperatur", data: [], borderColor: "#fb923c",
+        backgroundColor: "rgba(251,146,60,0.10)",
         tension: 0.3, pointRadius: 0, borderWidth: 2, fill: true },
-      { label: "Utomhustemperatur",  data: [], borderColor: "#4ade80",
-        backgroundColor: "rgba(74,222,128,0.08)",
+      { label: "Utomhustemperatur", data: [], borderColor: "#4ade80",
+        backgroundColor: "rgba(74,222,128,0.10)",
         tension: 0.3, pointRadius: 0, borderWidth: 2, fill: true }
     ]
   },
@@ -299,11 +553,11 @@ let chartHumPres = new Chart(
   type: "line",
   data: {
     datasets: [
-      { label: "Luftfuktighet (%)",  data: [], borderColor: "#c084fc",
-        backgroundColor: "rgba(192,132,252,0.08)",
+      { label: "Luftfuktighet (%)", data: [], borderColor: "#c084fc",
+        backgroundColor: "rgba(192,132,252,0.10)",
         tension: 0.3, pointRadius: 0, borderWidth: 2, fill: true, yAxisID: "yHum" },
-      { label: "Lufttryck (mbar)",   data: [], borderColor: "#f472b6",
-        backgroundColor: "rgba(244,114,182,0.08)",
+      { label: "Lufttryck (mbar)",  data: [], borderColor: "#f472b6",
+        backgroundColor: "rgba(244,114,182,0.10)",
         tension: 0.3, pointRadius: 0, borderWidth: 2, fill: true, yAxisID: "yPres" }
     ]
   },
@@ -323,8 +577,8 @@ let chartHumPres = new Chart(
     },
     scales: {
       x:     timeAxis(),
-      yHum:  { ...valueAxis("Luftfuktighet (%)"),  position: "left",  grid: { color: gridColor } },
-      yPres: { ...valueAxis("Lufttryck (mbar)"),   position: "right", grid: { display: false } }
+      yHum:  { ...valueAxis("Luftfuktighet (%)"), position: "left",  grid: { color: gridColor } },
+      yPres: { ...valueAxis("Lufttryck (mbar)"),  position: "right", grid: { display: false } }
     }
   }
 });
@@ -338,16 +592,17 @@ function updateCard(id, points) {
   el.innerHTML = latest.toFixed(1) + unit;
 }
 
+// ── Error helpers ─────────────────────────────────
 function showError(msg) {
   const b = document.getElementById("error-banner");
-  b.textContent = "⚠ " + msg;
+  b.textContent  = "⚠ " + msg;
   b.style.display = "block";
 }
 function clearError() {
   document.getElementById("error-banner").style.display = "none";
 }
 
-// ── Load all data ─────────────────────────────────
+// ── Load sensor data ──────────────────────────────
 async function loadData() {
   try {
     clearError();
@@ -371,6 +626,8 @@ async function loadData() {
     updateCard("val-humidity", hum);
     updateCard("val-pressure", pres);
 
+    document.getElementById("statusDot").classList.remove("offline");
+    document.getElementById("statusText").textContent = "Online";
     document.getElementById("last-updated").textContent =
       "Senast: " + new Date().toLocaleTimeString("sv-SE", {
         timeZone: "Europe/Stockholm"
@@ -379,12 +636,17 @@ async function loadData() {
   } catch(e) {
     showError(e.message);
     console.error(e);
+    document.getElementById("statusDot").classList.add("offline");
+    document.getElementById("statusText").textContent = "Offline";
   }
 }
 
-// Auto-refresh every 60 seconds
+// ── Initialise ────────────────────────────────────
 loadData();
-setInterval(loadData, 60000);
+fetchCamera();
+
+setInterval(loadData,    60000);          // sensors every 60 s
+setInterval(fetchCamera, CAMERA_REFRESH_MS); // camera every 60 min
 
 // ── Pull-to-refresh ───────────────────────────────
 let touchStartY = 0;
@@ -396,7 +658,7 @@ document.addEventListener("touchend", e => {
   const diff = e.changedTouches[0].clientY - touchStartY;
   if (diff > 80 && window.scrollY === 0) {
     document.getElementById("refresh-hint").textContent = "Uppdaterar...";
-    loadData().then(() => {
+    Promise.all([loadData(), fetchCamera()]).then(() => {
       document.getElementById("refresh-hint").textContent = "Dra nedåt för att uppdatera";
     });
   }
