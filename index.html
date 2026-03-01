@@ -19,10 +19,7 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
-    html, body {
-      height: 100%;
-      width: 100%;
-    }
+    html, body { height: 100%; width: 100%; }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
@@ -58,9 +55,7 @@
       z-index: 1;
     }
 
-    #bg.loading {
-      animation: bgPulse 2s infinite;
-    }
+    #bg.loading { animation: bgPulse 2s infinite; }
     @keyframes bgPulse {
       0%, 100% { background-color: #0d1117; }
       50%       { background-color: #161b22; }
@@ -197,7 +192,6 @@
       text-shadow: 0 1px 6px rgba(0,0,0,0.4);
     }
 
-    /* "Data saknas" styling — smaller, muted, italic */
     .card-value.no-data {
       font-size: 1rem;
       font-weight: 400;
@@ -271,10 +265,7 @@
       color: rgba(255,255,255,0.85);
     }
 
-    /* "Data saknas" overlay on charts */
-    .chart-wrap {
-      position: relative;
-    }
+    .chart-wrap { position: relative; }
 
     .chart-no-data {
       display: none;
@@ -286,10 +277,7 @@
       font-style: italic;
       color: rgba(255,255,255,0.30);
     }
-
-    .chart-no-data.visible {
-      display: flex;
-    }
+    .chart-no-data.visible { display: flex; }
 
     #countdown {
       text-align: center;
@@ -304,7 +292,6 @@
 <div id="bg" class="loading"></div>
 
 <div id="page">
-
   <header>
     <span>🌊</span>
     <h1>Långviken</h1>
@@ -367,7 +354,6 @@
     </div>
 
     <div id="countdown"></div>
-
     <p id="refresh-hint">Dra nedåt för att uppdatera</p>
 
     <div class="charts">
@@ -386,46 +372,32 @@
         </div>
       </div>
     </div>
-
   </main>
 </div>
 
 <script>
 // ═══════════════════════════════════════════════════
 //  CONFIG
+//  No Adafruit IO credentials here — they are stored
+//  securely in the Cloudflare Worker
 // ═══════════════════════════════════════════════════
-const AIO_USERNAME      = "Jollo77";
-const AIO_KEY           = "aio_FvuD74yFPP9gXsjCr7TpdSMN3e2m";
+const WORKER_URL        = 'https://langvikenproxy.jonas-c-lindh.workers.dev';
 const HOURS             = 168;
 const CAMERA_REFRESH_MS = 3600000;
 
-const FEEDS = {
-  water:   "water-temperature",
-  indoor:  "indoor-temperature",
-  outdoor: "outdoor-temperature",
-  hum:     "humidity",
-  pres:    "pressure"
-};
-
 // ═══════════════════════════════════════════════════
-//  ADAFRUIT IO HELPERS
-//  Every function returns a safe value on failure —
-//  [] for history, null for latest — never throws
+//  FETCH HELPERS
+//  All calls go to the Worker — never directly to AIO
 // ═══════════════════════════════════════════════════
 
-function aioUrl(feed) {
-  const end   = new Date();
-  const start = new Date(end - HOURS * 3600 * 1000);
-  return `https://io.adafruit.com/api/v2/${AIO_USERNAME}/feeds/${feed}/data?` +
-         `start_time=${start.toISOString()}&end_time=${end.toISOString()}&limit=1000` +
-         `&X-AIO-Key=${AIO_KEY}`;
-}
-
-async function fetchFeed(feedKey) {
+// Fetch historical data for charts — returns [] on failure
+async function fetchFeed(feedName) {
   try {
-    const r = await fetch(aioUrl(FEEDS[feedKey]));
+    const r = await fetch(
+      `${WORKER_URL}/history/${feedName}?hours=${HOURS}`
+    );
     if (!r.ok) {
-      console.warn(`Feed "${feedKey}" HTTP ${r.status}`);
+      console.warn(`history/${feedName} HTTP ${r.status}`);
       return [];
     }
     const data = await r.json();
@@ -435,17 +407,17 @@ async function fetchFeed(feedKey) {
       y: parseFloat(d.value)
     }));
   } catch (e) {
-    console.warn(`Feed "${feedKey}" failed:`, e.message);
+    console.warn(`fetchFeed "${feedName}" failed:`, e.message);
     return [];
   }
 }
 
+// Fetch latest single value — returns null on failure
 async function fetchLatest(feedName) {
   try {
-    const url = `https://io.adafruit.com/api/v2/${AIO_USERNAME}/feeds/${feedName}/data/last`;
-    const r   = await fetch(url, { headers: { 'X-AIO-Key': AIO_KEY } });
+    const r = await fetch(`${WORKER_URL}/feed/${feedName}`);
     if (!r.ok) {
-      console.warn(`fetchLatest "${feedName}" HTTP ${r.status}`);
+      console.warn(`feed/${feedName} HTTP ${r.status}`);
       return null;
     }
     return await r.json();
@@ -458,14 +430,6 @@ async function fetchLatest(feedName) {
 // ═══════════════════════════════════════════════════
 //  TIME FORMATTERS
 // ═══════════════════════════════════════════════════
-
-function fmtTime(iso) {
-  if (!iso) return '–';
-  return new Date(iso).toLocaleTimeString('sv-SE', {
-    timeZone: 'Europe/Stockholm',
-    hour: '2-digit', minute: '2-digit', second: '2-digit'
-  });
-}
 
 function fmtDateTime(iso) {
   if (!iso) return '–';
@@ -484,8 +448,7 @@ function fmtCountdown(totalSeconds) {
 
 // ═══════════════════════════════════════════════════
 //  CARD UPDATER
-//  Shows the value if data exists, otherwise shows
-//  "Data saknas" in a muted italic style
+//  Shows value if available, "Data saknas" if not
 // ═══════════════════════════════════════════════════
 
 function updateCard(id, points, decimals = 1) {
@@ -493,27 +456,19 @@ function updateCard(id, points, decimals = 1) {
   const unit = el.querySelector('.card-unit');
 
   if (!points || points.length === 0) {
-    // No data — show "Data saknas", hide unit
     el.classList.add('no-data');
     unit.style.display = 'none';
-    // Remove any previous value text node
-    while (el.firstChild && el.firstChild !== unit) {
+    while (el.firstChild && el.firstChild !== unit)
       el.removeChild(el.firstChild);
-    }
-    el.insertBefore(
-      document.createTextNode('Data saknas'),
-      unit
-    );
+    el.insertBefore(document.createTextNode('Data saknas'), unit);
     return;
   }
 
-  // Data available — show value + unit normally
   el.classList.remove('no-data');
   unit.style.display = '';
   const latest = points[points.length - 1].y;
-  while (el.firstChild && el.firstChild !== unit) {
+  while (el.firstChild && el.firstChild !== unit)
     el.removeChild(el.firstChild);
-  }
   el.insertBefore(
     document.createTextNode(latest.toFixed(decimals)),
     unit
@@ -522,8 +477,6 @@ function updateCard(id, points, decimals = 1) {
 
 // ═══════════════════════════════════════════════════
 //  CAMERA / BACKGROUND
-//  Completely isolated — failure here never affects
-//  sensor cards or charts
 // ═══════════════════════════════════════════════════
 
 let lastCameraFetch = 0;
@@ -531,27 +484,20 @@ let countdownTimer  = null;
 
 async function fetchCamera() {
   try {
-    console.log('Fetching camera-url feed...');
     const data = await fetchLatest('camera-url');
-
     if (!data || !data.value) {
-      console.warn('camera-url feed empty or null');
       document.getElementById('camTime').textContent = 'Ingen bild ännu';
       return;
     }
 
-    console.log('Camera URL:', data.value);
     const url = data.value + '?t=' + Date.now();
     const bg  = document.getElementById('bg');
-
-    const img    = new Image();
-    img.onload   = () => {
+    const img = new Image();
+    img.onload  = () => {
       bg.classList.remove('loading');
       bg.style.backgroundImage = `url('${url}')`;
-      console.log('Background image set OK');
     };
-    img.onerror  = () => {
-      console.warn('Background image load failed:', url);
+    img.onerror = () => {
       document.getElementById('camTime').textContent = 'Bild kunde inte laddas';
     };
     img.src = url;
@@ -561,9 +507,8 @@ async function fetchCamera() {
 
     lastCameraFetch = Date.now();
     startCountdown();
-
   } catch (e) {
-    console.warn('fetchCamera error (non-fatal):', e.message);
+    console.warn('fetchCamera error:', e.message);
     document.getElementById('camTime').textContent = 'Kamerafel';
   }
 }
@@ -572,9 +517,8 @@ function startCountdown() {
   if (countdownTimer) clearInterval(countdownTimer);
   const el = document.getElementById('countdown');
   countdownTimer = setInterval(() => {
-    const elapsed   = Date.now() - lastCameraFetch;
     const remaining = Math.max(0,
-      Math.floor((CAMERA_REFRESH_MS - elapsed) / 1000));
+      Math.floor((CAMERA_REFRESH_MS - (Date.now() - lastCameraFetch)) / 1000));
     el.textContent = remaining > 0
       ? `Nästa bild om ${fmtCountdown(remaining)}`
       : 'Hämtar ny bild...';
@@ -676,25 +620,18 @@ let chartHumPres = new Chart(
   }
 });
 
-// Show or hide "Data saknas" overlay on a chart
 function setChartNoData(overlayId, hasData) {
   const el = document.getElementById(overlayId);
-  if (hasData) {
-    el.classList.remove('visible');
-  } else {
-    el.classList.add('visible');
-  }
+  hasData ? el.classList.remove('visible') : el.classList.add('visible');
 }
 
 // ═══════════════════════════════════════════════════
 //  LOAD SENSOR DATA
-//  Promise.allSettled means every feed is attempted
-//  independently — one failure never blocks others
 // ═══════════════════════════════════════════════════
 
 function showError(msg) {
   const b = document.getElementById("error-banner");
-  b.textContent   = "⚠ " + msg;
+  b.textContent = "⚠ " + msg;
   b.style.display = "block";
 }
 
@@ -705,67 +642,45 @@ function clearError() {
 async function loadData() {
   try {
     clearError();
-    console.log('Loading sensor data...');
 
-    // allSettled — all feeds run regardless of individual failures
     const results = await Promise.allSettled([
-      fetchFeed("water"),
-      fetchFeed("indoor"),
-      fetchFeed("outdoor"),
-      fetchFeed("hum"),
-      fetchFeed("pres")
+      fetchFeed("water-temperature"),
+      fetchFeed("indoor-temperature"),
+      fetchFeed("outdoor-temperature"),
+      fetchFeed("humidity"),
+      fetchFeed("pressure")
     ]);
 
-    // Safe extraction — [] if a feed failed at the Promise level
     const water   = results[0].status === 'fulfilled' ? results[0].value : [];
     const indoor  = results[1].status === 'fulfilled' ? results[1].value : [];
     const outdoor = results[2].status === 'fulfilled' ? results[2].value : [];
     const hum     = results[3].status === 'fulfilled' ? results[3].value : [];
     const pres    = results[4].status === 'fulfilled' ? results[4].value : [];
 
-    console.log(
-      `water:${water.length} indoor:${indoor.length} ` +
-      `outdoor:${outdoor.length} hum:${hum.length} pres:${pres.length}`
-    );
-
-    // ── Update sensor cards ──────────────────────────
-    // Each card independently shows value or "Data saknas"
     updateCard("val-water",    water);
     updateCard("val-indoor",   indoor);
     updateCard("val-outdoor",  outdoor);
-    updateCard("val-humidity", hum,   1);
-    updateCard("val-pressure", pres,  0);
+    updateCard("val-humidity", hum,  1);
+    updateCard("val-pressure", pres, 0);
 
-    // ── Update temperature chart ─────────────────────
     chartTemp.data.datasets[0].data = water;
     chartTemp.data.datasets[1].data = indoor;
     chartTemp.data.datasets[2].data = outdoor;
     chartTemp.update("none");
 
-    // Show "Data saknas" on temp chart only if ALL three
-    // temperature feeds are empty
-    const hasTempData = water.length > 0 ||
-                        indoor.length > 0 ||
-                        outdoor.length > 0;
-    setChartNoData('no-data-temp', hasTempData);
-
-    // ── Update humidity/pressure chart ───────────────
     chartHumPres.data.datasets[0].data = hum;
     chartHumPres.data.datasets[1].data = pres;
     chartHumPres.update("none");
 
-    const hasHumPresData = hum.length > 0 || pres.length > 0;
+    const hasTempData    = water.length > 0 || indoor.length > 0 || outdoor.length > 0;
+    const hasHumPresData = hum.length > 0   || pres.length > 0;
+
+    setChartNoData('no-data-temp',    hasTempData);
     setChartNoData('no-data-humpres', hasHumPresData);
 
-    // ── Status indicator ────────────────────────────
     const anyData = hasTempData || hasHumPresData;
-    if (anyData) {
-      document.getElementById("statusDot").classList.remove("offline");
-      document.getElementById("statusText").textContent = "Online";
-    } else {
-      document.getElementById("statusDot").classList.add("offline");
-      document.getElementById("statusText").textContent = "Ingen data";
-    }
+    document.getElementById("statusDot").classList.toggle("offline", !anyData);
+    document.getElementById("statusText").textContent = anyData ? "Online" : "Ingen data";
 
     document.getElementById("last-updated").textContent =
       "Senast: " + new Date().toLocaleTimeString("sv-SE", {
@@ -773,9 +688,7 @@ async function loadData() {
       });
 
   } catch (e) {
-    // Safety net — should never reach here given individual
-    // try/catch in fetchFeed, but included for completeness
-    console.error('loadData unexpected error:', e);
+    console.error('loadData error:', e);
     showError("Fel vid dataladdning: " + e.message);
     document.getElementById("statusDot").classList.add("offline");
     document.getElementById("statusText").textContent = "Offline";
@@ -783,11 +696,9 @@ async function loadData() {
 }
 
 // ═══════════════════════════════════════════════════
-//  INITIALISE — camera and sensors fully independent
+//  INITIALISE
 // ═══════════════════════════════════════════════════
 
-// Set all cards to "Data saknas" immediately on load
-// so there is never a blank/broken state before data arrives
 ['val-water','val-indoor','val-outdoor','val-humidity','val-pressure']
   .forEach(id => updateCard(id, []));
 
@@ -802,7 +713,6 @@ setInterval(fetchCamera, CAMERA_REFRESH_MS);
 // ═══════════════════════════════════════════════════
 
 let touchStartY = 0;
-
 document.addEventListener("touchstart", e => {
   touchStartY = e.touches[0].clientY;
 }, { passive: true });
@@ -819,7 +729,19 @@ document.addEventListener("touchend", e => {
     }, 3000);
   }
 }, { passive: true });
-
 </script>
 </body>
 </html>
+```
+
+---
+
+## Summary of how this works
+```
+Your HTML on GitHub (public, no secrets)
+    ↓  calls  https://langviken-proxy.xxx.workers.dev/feed/humidity
+Cloudflare Worker (your AIO key stored as a secret here)
+    ↓  calls  https://io.adafruit.com/api/v2/... with key in header
+Adafruit IO
+    ↓  returns data
+Cloudflare Worker passes data back to your browser
