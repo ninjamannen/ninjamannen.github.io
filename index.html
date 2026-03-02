@@ -218,4 +218,419 @@
     }
     .chart-box {
       background: rgba(22,27,34,0.60);
-      backdrop-
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 14px;
+      padding: 16px 14px;
+    }
+    .chart-box h2 {
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: rgba(255,255,255,0.85);
+    }
+    .chart-wrap { position: relative; }
+    .chart-no-data {
+      display: none;
+      position: absolute;
+      inset: 0;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85rem;
+      font-style: italic;
+      color: rgba(255,255,255,0.30);
+    }
+    .chart-no-data.visible { display: flex; }
+    #countdown {
+      text-align: center;
+      font-size: 0.70rem;
+      color: rgba(255,255,255,0.30);
+      padding: 6px 0 12px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="bg" class="loading"></div>
+
+<div id="page">
+  <header>
+    <span>🌊</span>
+    <h1>Långviken</h1>
+    <div class="status-pill">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">–</span>
+    </div>
+    <div id="last-updated">Laddar...</div>
+  </header>
+
+  <main>
+    <div id="error-banner"></div>
+    <div class="cam-bar">
+      <div class="cam-info" id="camTime">Hämtar bild...</div>
+      <button class="cam-btn" onclick="fetchCamera()">↻ Ny bild</button>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <div class="card-label">
+          <span class="card-dot" style="background:#38bdf8"></span>Vattentemperatur
+        </div>
+        <div class="card-value" id="val-water">
+          <span class="card-unit">°C</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-label">
+          <span class="card-dot" style="background:#fb923c"></span>Inomhustemperatur
+        </div>
+        <div class="card-value" id="val-indoor">
+          <span class="card-unit">°C</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-label">
+          <span class="card-dot" style="background:#4ade80"></span>Utomhustemperatur
+        </div>
+        <div class="card-value" id="val-outdoor">
+          <span class="card-unit">°C</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-label">
+          <span class="card-dot" style="background:#c084fc"></span>Luftfuktighet
+        </div>
+        <div class="card-value" id="val-humidity">
+          <span class="card-unit">%</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-label">
+          <span class="card-dot" style="background:#f472b6"></span>Lufttryck
+        </div>
+        <div class="card-value" id="val-pressure">
+          <span class="card-unit">mbar</span>
+        </div>
+      </div>
+    </div>
+    <div id="countdown"></div>
+    <p id="refresh-hint">Dra nedåt för att uppdatera</p>
+    <div class="charts">
+      <div class="chart-box">
+        <h2>🌡 Temperatur — 168h</h2>
+        <div class="chart-wrap">
+          <canvas id="chart-temp"></canvas>
+          <div class="chart-no-data" id="no-data-temp">Data saknas</div>
+        </div>
+      </div>
+      <div class="chart-box">
+        <h2>💧 Luftfuktighet &amp; Lufttryck — 168h</h2>
+        <div class="chart-wrap">
+          <canvas id="chart-hum-pres"></canvas>
+          <div class="chart-no-data" id="no-data-humpres">Data saknas</div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+var WORKER_URL        = 'https://langvikenproxy.jonas-c-lindh.workers.dev';
+var HOURS             = 168;
+var CAMERA_REFRESH_MS = 3600000;
+
+function fetchFeed(feedName) {
+  return fetch(WORKER_URL + '/history/' + feedName + '?hours=' + HOURS)
+    .then(function(r) {
+      if (!r.ok) { console.warn('history/' + feedName + ' HTTP ' + r.status); return []; }
+      return r.json();
+    })
+    .then(function(data) {
+      if (!Array.isArray(data) || data.length === 0) return [];
+      return data.reverse().map(function(d) {
+        return { x: new Date(d.created_at), y: parseFloat(d.value) };
+      });
+    })
+    .catch(function(e) { console.warn('fetchFeed ' + feedName + ' failed: ' + e.message); return []; });
+}
+
+function fetchLatest(feedName) {
+  return fetch(WORKER_URL + '/feed/' + feedName)
+    .then(function(r) {
+      if (!r.ok) { console.warn('feed/' + feedName + ' HTTP ' + r.status); return null; }
+      return r.json();
+    })
+    .catch(function(e) { console.warn('fetchLatest ' + feedName + ' failed: ' + e.message); return null; });
+}
+
+function fmtDateTime(iso) {
+  if (!iso) return '–';
+  return new Date(iso).toLocaleString('sv-SE', {
+    timeZone: 'Europe/Stockholm',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit'
+  });
+}
+
+function fmtCountdown(totalSeconds) {
+  var m = Math.floor(totalSeconds / 60);
+  var s = totalSeconds % 60;
+  return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+function updateCard(id, points, decimals) {
+  if (decimals === undefined) decimals = 1;
+  var el   = document.getElementById(id);
+  var unit = el.querySelector('.card-unit');
+  if (!points || points.length === 0) {
+    el.classList.add('no-data');
+    unit.style.display = 'none';
+    while (el.firstChild && el.firstChild !== unit)
+      el.removeChild(el.firstChild);
+    el.insertBefore(document.createTextNode('Data saknas'), unit);
+    return;
+  }
+  el.classList.remove('no-data');
+  unit.style.display = '';
+  var latest = points[points.length - 1].y;
+  while (el.firstChild && el.firstChild !== unit)
+    el.removeChild(el.firstChild);
+  el.insertBefore(document.createTextNode(latest.toFixed(decimals)), unit);
+}
+
+var lastCameraFetch = 0;
+var countdownTimer  = null;
+
+function fetchCamera() {
+  fetchLatest('camera-url')
+    .then(function(data) {
+      if (!data || !data.value) {
+        document.getElementById('camTime').textContent = 'Ingen bild ännu';
+        return;
+      }
+      var url = data.value + '?t=' + Date.now();
+      var bg  = document.getElementById('bg');
+      var img = new Image();
+      img.onload  = function() {
+        bg.classList.remove('loading');
+        bg.style.backgroundImage = "url('" + url + "')";
+      };
+      img.onerror = function() {
+        document.getElementById('camTime').textContent = 'Bild kunde inte laddas';
+      };
+      img.src = url;
+      document.getElementById('camTime').textContent = 'Tagen: ' + fmtDateTime(data.created_at);
+      lastCameraFetch = Date.now();
+      startCountdown();
+    })
+    .catch(function(e) {
+      console.warn('fetchCamera error:', e.message);
+      document.getElementById('camTime').textContent = 'Kamerafel';
+    });
+}
+
+function startCountdown() {
+  if (countdownTimer) clearInterval(countdownTimer);
+  var el = document.getElementById('countdown');
+  countdownTimer = setInterval(function() {
+    var remaining = Math.max(0,
+      Math.floor((CAMERA_REFRESH_MS - (Date.now() - lastCameraFetch)) / 1000));
+    el.textContent = remaining > 0
+      ? 'Nästa bild om ' + fmtCountdown(remaining)
+      : 'Hämtar ny bild...';
+    if (remaining === 0) clearInterval(countdownTimer);
+  }, 1000);
+}
+
+var gridColor = "rgba(255,255,255,0.07)";
+var tickColor = "rgba(255,255,255,0.45)";
+
+function timeAxis() {
+  return {
+    type: "time",
+    time: { unit: "day", displayFormats: { day: "EEE dd/MM" } },
+    ticks: { color: tickColor, maxTicksLimit: 8 },
+    grid:  { color: gridColor }
+  };
+}
+
+function valueAxis(label) {
+  return {
+    ticks: { color: tickColor },
+    grid:  { color: gridColor },
+    title: { display: true, text: label, color: tickColor, font: { size: 10 } }
+  };
+}
+
+var chartTemp = new Chart(
+  document.getElementById("chart-temp").getContext("2d"), {
+  type: "line",
+  data: {
+    datasets: [
+      { label: "Vattentemperatur",  data: [], borderColor: "#38bdf8",
+        backgroundColor: "rgba(56,189,248,0.10)",
+        tension: 0.3, pointRadius: 0, borderWidth: 2, fill: true },
+      { label: "Inomhustemperatur", data: [], borderColor: "#fb923c",
+        backgroundColor: "rgba(251,146,60,0.10)",
+        tension: 0.3, pointRadius: 0, borderWidth: 2, fill: true },
+      { label: "Utomhustemperatur", data: [], borderColor: "#4ade80",
+        backgroundColor: "rgba(74,222,128,0.10)",
+        tension: 0.3, pointRadius: 0, borderWidth: 2, fill: true }
+    ]
+  },
+  options: {
+    responsive: true,
+    interaction: { mode: "index", intersect: false },
+    plugins: {
+      legend: { labels: { color: "#e6edf3", boxWidth: 10, font: { size: 11 } } },
+      tooltip: {
+        callbacks: {
+          label: function(ctx) {
+            return ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(1) + ' °C';
+          }
+        }
+      }
+    },
+    scales: { x: timeAxis(), y: valueAxis("°C") }
+  }
+});
+
+var chartHumPres = new Chart(
+  document.getElementById("chart-hum-pres").getContext("2d"), {
+  type: "line",
+  data: {
+    datasets: [
+      { label: "Luftfuktighet (%)", data: [], borderColor: "#c084fc",
+        backgroundColor: "rgba(192,132,252,0.10)",
+        tension: 0.3, pointRadius: 0, borderWidth: 2, fill: true,
+        yAxisID: "yHum" },
+      { label: "Lufttryck (mbar)",  data: [], borderColor: "#f472b6",
+        backgroundColor: "rgba(244,114,182,0.10)",
+        tension: 0.3, pointRadius: 0, borderWidth: 2, fill: true,
+        yAxisID: "yPres" }
+    ]
+  },
+  options: {
+    responsive: true,
+    interaction: { mode: "index", intersect: false },
+    plugins: {
+      legend: { labels: { color: "#e6edf3", boxWidth: 10, font: { size: 11 } } },
+      tooltip: {
+        callbacks: {
+          label: function(ctx) {
+            var unit = ctx.dataset.yAxisID === "yHum" ? "%" : "mbar";
+            return ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(1) + ' ' + unit;
+          }
+        }
+      }
+    },
+    scales: {
+      x:     timeAxis(),
+      yHum:  Object.assign({}, valueAxis("Luftfuktighet (%)"),
+               { position: "left",  grid: { color: gridColor } }),
+      yPres: Object.assign({}, valueAxis("Lufttryck (mbar)"),
+               { position: "right", grid: { display: false } })
+    }
+  }
+});
+
+function setChartNoData(overlayId, hasData) {
+  var el = document.getElementById(overlayId);
+  if (hasData) { el.classList.remove('visible'); }
+  else         { el.classList.add('visible');    }
+}
+
+function showError(msg) {
+  var b = document.getElementById("error-banner");
+  b.textContent   = "⚠ " + msg;
+  b.style.display = "block";
+}
+
+function clearError() {
+  document.getElementById("error-banner").style.display = "none";
+}
+
+function loadData() {
+  clearError();
+  Promise.allSettled([
+    fetchFeed("water-temperature"),
+    fetchFeed("indoor-temperature"),
+    fetchFeed("outdoor-temperature"),
+    fetchFeed("humidity"),
+    fetchFeed("pressure")
+  ]).then(function(results) {
+    var water   = results[0].status === 'fulfilled' ? results[0].value : [];
+    var indoor  = results[1].status === 'fulfilled' ? results[1].value : [];
+    var outdoor = results[2].status === 'fulfilled' ? results[2].value : [];
+    var hum     = results[3].status === 'fulfilled' ? results[3].value : [];
+    var pres    = results[4].status === 'fulfilled' ? results[4].value : [];
+
+    console.log('water:' + water.length + ' indoor:' + indoor.length +
+                ' outdoor:' + outdoor.length + ' hum:' + hum.length +
+                ' pres:' + pres.length);
+
+    updateCard("val-water",    water);
+    updateCard("val-indoor",   indoor);
+    updateCard("val-outdoor",  outdoor);
+    updateCard("val-humidity", hum,  1);
+    updateCard("val-pressure", pres, 0);
+
+    chartTemp.data.datasets[0].data = water;
+    chartTemp.data.datasets[1].data = indoor;
+    chartTemp.data.datasets[2].data = outdoor;
+    chartTemp.update("none");
+
+    chartHumPres.data.datasets[0].data = hum;
+    chartHumPres.data.datasets[1].data = pres;
+    chartHumPres.update("none");
+
+    var hasTempData    = water.length > 0 || indoor.length > 0 || outdoor.length > 0;
+    var hasHumPresData = hum.length > 0   || pres.length > 0;
+
+    setChartNoData('no-data-temp',    hasTempData);
+    setChartNoData('no-data-humpres', hasHumPresData);
+
+    var anyData = hasTempData || hasHumPresData;
+    document.getElementById("statusDot").classList.toggle("offline", !anyData);
+    document.getElementById("statusText").textContent = anyData ? "Online" : "Ingen data";
+    document.getElementById("last-updated").textContent =
+      "Senast: " + new Date().toLocaleTimeString("sv-SE", {
+        timeZone: "Europe/Stockholm"
+      });
+  }).catch(function(e) {
+    console.error('loadData error:', e);
+    showError("Fel: " + e.message);
+    document.getElementById("statusDot").classList.add("offline");
+    document.getElementById("statusText").textContent = "Offline";
+  });
+}
+
+// Initialise
+var ids = ['val-water','val-indoor','val-outdoor','val-humidity','val-pressure'];
+for (var i = 0; i < ids.length; i++) { updateCard(ids[i], []); }
+
+loadData();
+fetchCamera();
+
+setInterval(loadData,    60000);
+setInterval(fetchCamera, CAMERA_REFRESH_MS);
+
+// Pull-to-refresh
+var touchStartY = 0;
+document.addEventListener("touchstart", function(e) {
+  touchStartY = e.touches[0].clientY;
+}, { passive: true });
+document.addEventListener("touchend", function(e) {
+  var diff = e.changedTouches[0].clientY - touchStartY;
+  if (diff > 80 && window.scrollY === 0) {
+    document.getElementById("refresh-hint").textContent = "Uppdaterar...";
+    loadData();
+    fetchCamera();
+    setTimeout(function() {
+      document.getElementById("refresh-hint").textContent = "Dra nedåt för att uppdatera";
+    }, 3000);
+  }
+}, { passive: true });
+</script>
+</body>
+</html>
