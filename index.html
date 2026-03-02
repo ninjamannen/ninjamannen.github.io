@@ -699,8 +699,12 @@ async function loadData() {
 //  INITIALISE
 // ═══════════════════════════════════════════════════
 
-['val-water','val-indoor','val-outdoor','val-humidity','val-pressure']
-  .forEach(id => updateCard(id, []));
+(function() {
+  var ids = ['val-water','val-indoor','val-outdoor','val-humidity','val-pressure'];
+  for (var i = 0; i < ids.length; i++) {
+    updateCard(ids[i], []);
+  }
+})();
 
 loadData();
 fetchCamera();
@@ -712,26 +716,24 @@ setInterval(fetchCamera, CAMERA_REFRESH_MS);
 //  PULL-TO-REFRESH
 // ═══════════════════════════════════════════════════
 
-let touchStartY = 0;
-document.addEventListener("touchstart", e => {
+var touchStartY = 0;
+
+document.addEventListener("touchstart", function(e) {
   touchStartY = e.touches[0].clientY;
 }, { passive: true });
 
-document.addEventListener("touchend", e => {
-  const diff = e.changedTouches[0].clientY - touchStartY;
+document.addEventListener("touchend", function(e) {
+  var diff = e.changedTouches[0].clientY - touchStartY;
   if (diff > 80 && window.scrollY === 0) {
     document.getElementById("refresh-hint").textContent = "Uppdaterar...";
     loadData();
     fetchCamera();
-    setTimeout(() => {
+    setTimeout(function() {
       document.getElementById("refresh-hint").textContent =
         "Dra nedåt för att uppdatera";
     }, 3000);
   }
 }, { passive: true });
-</script>
-</body>
-</html>
 ```
 
 ---
