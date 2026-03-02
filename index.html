@@ -643,7 +643,7 @@ async function loadData() {
   try {
     clearError();
 
-    const results = await Promise.allSettled([
+    var results = await Promise.allSettled([
       fetchFeed("water-temperature"),
       fetchFeed("indoor-temperature"),
       fetchFeed("outdoor-temperature"),
@@ -651,11 +651,11 @@ async function loadData() {
       fetchFeed("pressure")
     ]);
 
-    const water   = results[0].status === 'fulfilled' ? results[0].value : [];
-    const indoor  = results[1].status === 'fulfilled' ? results[1].value : [];
-    const outdoor = results[2].status === 'fulfilled' ? results[2].value : [];
-    const hum     = results[3].status === 'fulfilled' ? results[3].value : [];
-    const pres    = results[4].status === 'fulfilled' ? results[4].value : [];
+    var water   = results[0].status === 'fulfilled' ? results[0].value : [];
+    var indoor  = results[1].status === 'fulfilled' ? results[1].value : [];
+    var outdoor = results[2].status === 'fulfilled' ? results[2].value : [];
+    var hum     = results[3].status === 'fulfilled' ? results[3].value : [];
+    var pres    = results[4].status === 'fulfilled' ? results[4].value : [];
 
     updateCard("val-water",    water);
     updateCard("val-indoor",   indoor);
@@ -672,13 +672,13 @@ async function loadData() {
     chartHumPres.data.datasets[1].data = pres;
     chartHumPres.update("none");
 
-    const hasTempData    = water.length > 0 || indoor.length > 0 || outdoor.length > 0;
-    const hasHumPresData = hum.length > 0   || pres.length > 0;
+    var hasTempData    = water.length > 0 || indoor.length > 0 || outdoor.length > 0;
+    var hasHumPresData = hum.length > 0   || pres.length > 0;
 
     setChartNoData('no-data-temp',    hasTempData);
     setChartNoData('no-data-humpres', hasHumPresData);
 
-    const anyData = hasTempData || hasHumPresData;
+    var anyData = hasTempData || hasHumPresData;
     document.getElementById("statusDot").classList.toggle("offline", !anyData);
     document.getElementById("statusText").textContent = anyData ? "Online" : "Ingen data";
 
