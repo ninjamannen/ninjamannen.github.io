@@ -590,8 +590,11 @@ function makeSingleChart(canvasId, label, color, yLabel, tooltipUnit) {
         label: label,
         data: [],
         borderColor: color,
-        backgroundColor: color.replace(')', ',0.10)').replace('rgb', 'rgba'),
-        tension: 0.3, pointRadius: 0, borderWidth: 2, fill: true
+        backgroundColor: "transparent",
+        tension: 0.3,
+        pointRadius: 0,
+        borderWidth: 2,
+        fill: false
       }]
     },
     options: {
